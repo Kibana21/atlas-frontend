@@ -18,7 +18,8 @@ ATLAS-001 CP6 (F-01…F-09, plus the F-11 CI brought forward) is in place:
 - **Generation:** contract types and tokens generated from the pinned `contract-v0.1.0`.
 - **App:** shell, `/` placeholder, `/status` (six states), the transport, CSP and headers, the image, and CI.
 
-CP7 (Playwright E2E against a real backend, F-12 `e2e` job, release tags) needs **owner authorization**.
+CP7 (owner-authorized): Playwright E2E in Chromium against the real backend (`pnpm e2e`, F-10), the CI `e2e` job
+(F-12, backend at `e2e/backend.ref`) and the README (F-13). The `v0.1.0` release tag follows only after G7 evidence.
 
 ## Commands
 
@@ -31,9 +32,12 @@ pnpm specs && pnpm gen      # extract the pinned specs, regenerate API types + t
 pnpm check:generated        # drift check (CI `generated`)
 pnpm build && pnpm start    # production server; node scripts/check-headers.mjs http://127.0.0.1:3000
 scripts/image-check.sh      # image build, hadolint, Trivy, non-root, hardened run, headers, graceful stop
+pnpm specs && pnpm e2e:build && pnpm e2e   # Chromium E2E vs the real backend (../atlas-backend, .env.test)
 ```
 
-CI (`.github/workflows/frontend-ci.yml`) has the required checks `static`, `unit`, `generated`, `build`, `security` and `image`, on every PR and on `main`.
+CI (`.github/workflows/frontend-ci.yml`) has the required checks `static`, `unit`, `generated`, `build`, `security`, `image` and `e2e`, on every PR and on `main`.
+
+E2E rules: outages only through the suite's own proxies (`e2e/support/fault-proxy.ts`), never by stopping a real service; backend test environment only (`atlas_test`, Redis DB 11, `atlas:test:e2e:`); no `page.route(`, mocks or interception in `e2e/` (hygiene test).
 
 Navigation stays minimal until product screens exist (FR-55; no dead controls): the shell has a skip link and the wordmark; `/` links only to `/status`.
 
