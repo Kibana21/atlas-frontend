@@ -48,3 +48,8 @@ storybook-static/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Project-local toolchain (scripts/bootstrap-node.sh)
+.tools/
+# CI-only read-only checkout of atlas-specs
+.deps/
