@@ -24,7 +24,9 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "audit": "pnpm audit --prod --audit-level high",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:coverage"
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:coverage",
+    "e2e:build": "NEXT_PUBLIC_ATLAS_API_BASE_URL=http://127.0.0.1:8110 next build",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.1",
@@ -34,6 +36,7 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
@@ -44,6 +47,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "@vitest/coverage-v8": "^5.0.3",
+    "ajv": "^8.20.0",
     "axe-core": "^4.14.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.4.1",
@@ -53,6 +57,7 @@
     "prettier": "^3.9.10",
     "tailwindcss": "^4.3.3",
     "typescript": "5.9.3",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "yaml": "^2.9.1"
   }
 }

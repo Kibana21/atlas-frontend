@@ -150,3 +150,166 @@ jobs:
         env:
           NEXT_PUBLIC_ATLAS_FRONTEND_SHA: ${{ github.sha }}
         run: scripts/image-check.sh
+
+  e2e:
+    # F-12 (AC-16): Playwright Chromium against the production build (`next start`) and the real backend at
+    # e2e/backend.ref (two API processes + Taskiq worker), with job-local postgres:15 and redis:7.4 services
+    # (never shared infrastructure). Outages are simulated by the suite's own TCP proxies; no request is
+    # intercepted in the browser. Role passwords are random per run and masked.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      UV_VERSION: "0.10.0" # as in atlas-backend CI
+      UV_PYTHON_DOWNLOADS: never # ubuntu-24.04 system Python 3.12
+    services:
+      postgres:
+        image: postgres:15.19@sha256:baa22e6286bf832cb147b8bb5aa9d8bc999846d69c21d11bf63f58fbeed1fa48
+        env:
+          # Bootstrap superuser of this ephemeral, job-local container only (not a secret of any shared system).
+          POSTGRES_PASSWORD: ci-ephemeral-bootstrap
+          POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+          POSTGRES_INITDB_ARGS: --auth-local=scram-sha-256 --auth-host=scram-sha-256 --locale=C --encoding=UTF8
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+      redis:
+        image: redis:7.4.9@sha256:a8f08480e1f88f2647fed492d1178c06abb0d0c1fbf02c682a61e2f483fb3954
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read pinned atlas-specs commit and backend ref
+        id: refs
+        run: |
+          set -euo pipefail
+          specs="$(awk -F'"' '/^specs_commit:/{print $2}' specs.lock)"
+          backend="$(tr -d '[:space:]' < e2e/backend.ref)"
+          for sha in "$specs" "$backend"; do [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "not a full SHA: $sha"; exit 1; }; done
+          echo "specs=$specs" >> "$GITHUB_OUTPUT"
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+      - name: Checkout atlas-specs at the pinned commit (public, read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Kibana21/atlas-specs
+          ref: ${{ steps.refs.outputs.specs }}
+          path: .deps/atlas-specs
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Checkout atlas-backend at e2e/backend.ref (public, read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Kibana21/atlas-backend
+          ref: ${{ steps.refs.outputs.backend }}
+          path: .deps/atlas-backend
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: .deps/atlas-backend/uv.lock
+      - name: Backend environment (locked)
+        working-directory: .deps/atlas-backend
+        run: uv sync --locked
+      - name: Bootstrap SQL equals the approved proposal at the pinned specs commit
+        working-directory: .deps/atlas-backend
+        run: >-
+          uv run python scripts/db/check_bootstrap.py scripts/db/bootstrap.sql
+          ../atlas-specs/features/ATLAS-001-engineering-foundation/proposals/postgres-local-setup.sql
+      - name: Create the four Atlas roles and databases (random per-run passwords, masked)
+        env:
+          PGPASSWORD: ci-ephemeral-bootstrap
+          CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          for var in ATLAS_MIGRATOR_PASSWORD ATLAS_APP_PASSWORD ATLAS_TEST_MIGRATOR_PASSWORD ATLAS_TEST_APP_PASSWORD; do
+            value="$(openssl rand -hex 24)"
+            echo "::add-mask::${value}"
+            echo "${var}=${value}" >> "$GITHUB_ENV"
+            export "${var}=${value}"
+          done
+          docker exec -i -e PGPASSWORD -e ATLAS_MIGRATOR_PASSWORD -e ATLAS_APP_PASSWORD \
+            -e ATLAS_TEST_MIGRATOR_PASSWORD -e ATLAS_TEST_APP_PASSWORD "$CONTAINER" \
+            psql -U postgres -d postgres -X -q -v ON_ERROR_STOP=1 -f - < .deps/atlas-backend/scripts/db/bootstrap.sql > /dev/null
+      - name: Migrate atlas_test as atlas_test_migrator
+        working-directory: .deps/atlas-backend
+        env:
+          ATLAS_ENV: test
+          ATLAS_ENV_FILE: /nonexistent
+          ATLAS_DATABASE_URL: postgresql+psycopg://atlas_test_app:${{ env.ATLAS_TEST_APP_PASSWORD }}@localhost:5432/atlas_test
+          ATLAS_MIGRATION_DATABASE_URL: postgresql+psycopg://atlas_test_migrator:${{ env.ATLAS_TEST_MIGRATOR_PASSWORD }}@localhost:5432/atlas_test
+          ATLAS_DB_APP_ROLE: atlas_test_app
+          ATLAS_REDIS_URL: redis://localhost:6379/11
+          ATLAS_REDIS_KEY_PREFIX: "atlas:test:e2e:"
+        run: |
+          uv run alembic upgrade head
+          uv run alembic current | tee ../alembic-current.txt
+          grep -q '^0001_baseline (head)$' ../alembic-current.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable pnpm && pnpm install --frozen-lockfile
+      - run: SPECS_DIR=.deps/atlas-specs pnpm specs # pinned contract for the response checks and lock parity
+      - name: Install Chromium (version pinned by @playwright/test)
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Production build pointing at the E2E API proxy
+        env:
+          NEXT_PUBLIC_ATLAS_FRONTEND_SHA: ${{ github.sha }}
+        run: pnpm e2e:build
+      - name: Playwright E2E (Chromium) against the real backend
+        env:
+          ATLAS_E2E_BACKEND_DIR: .deps/atlas-backend
+          ATLAS_ENV: test
+          ATLAS_DATABASE_URL: postgresql+psycopg://atlas_test_app:${{ env.ATLAS_TEST_APP_PASSWORD }}@localhost:5432/atlas_test
+          ATLAS_MIGRATION_DATABASE_URL: postgresql+psycopg://atlas_test_migrator:${{ env.ATLAS_TEST_MIGRATOR_PASSWORD }}@localhost:5432/atlas_test
+          ATLAS_DB_APP_ROLE: atlas_test_app
+          ATLAS_REDIS_URL: redis://localhost:6379/11
+          ATLAS_BUILD_SHA: ${{ steps.refs.outputs.backend }}
+          NEXT_PUBLIC_ATLAS_FRONTEND_SHA: ${{ github.sha }}
+        run: pnpm e2e
+      - name: No request interception in the acceptance specs (AC-16)
+        run: |
+          if grep -rn "page.route(" e2e/; then echo "route interception found"; exit 1; fi
+          echo "OK: no page.route( in e2e/"
+      - name: No E2E keys remain in the job's Redis (read-only)
+        working-directory: .deps/atlas-backend
+        env:
+          ATLAS_ENV: test
+          ATLAS_ENV_FILE: /nonexistent
+          ATLAS_DATABASE_URL: postgresql+psycopg://atlas_test_app:${{ env.ATLAS_TEST_APP_PASSWORD }}@localhost:5432/atlas_test
+          ATLAS_MIGRATION_DATABASE_URL: postgresql+psycopg://atlas_test_migrator:${{ env.ATLAS_TEST_MIGRATOR_PASSWORD }}@localhost:5432/atlas_test
+          ATLAS_DB_APP_ROLE: atlas_test_app
+          ATLAS_REDIS_URL: redis://localhost:6379/11
+          ATLAS_REDIS_KEY_PREFIX: "atlas:test:e2e:"
+        run: |
+          uv run python scripts/redis_keys.py --db 11 --pattern 'atlas:test:*' | tee ../redis-keys.txt
+          grep -q ": 0 keys match" ../redis-keys.txt
+      - name: Diagnostics must not contain a credential before upload
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          for var in ATLAS_MIGRATOR_PASSWORD ATLAS_APP_PASSWORD ATLAS_TEST_MIGRATOR_PASSWORD ATLAS_TEST_APP_PASSWORD; do
+            if grep -rqF -- "${!var}" playwright-report test-results 2>/dev/null; then
+              echo "a credential appears in the E2E diagnostics; removing them instead of uploading"
+              rm -rf playwright-report test-results
+              exit 1
+            fi
+          done
+          echo "OK: no credential in playwright-report/ or test-results/"
+      - name: Upload Playwright report and stack logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: error

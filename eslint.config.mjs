@@ -13,6 +13,8 @@ const config = [
       "coverage/**",
       "node_modules/**",
       "next-env.d.ts",
+      "playwright-report/**",
+      "test-results/**",
       "src/generated/**",
     ],
   },

@@ -67,8 +67,52 @@ Never hand-edit generated files or duplicate API schemas. The only module that k
 | `pnpm audit`             | Production dependencies, fails on high/critical                                                     |
 | `scripts/image-check.sh` | Build the image; hadolint, Trivy, non-root and hardened-run checks; security headers; graceful stop |
 
-CI (`.github/workflows/frontend-ci.yml`) runs `static`, `unit`, `generated`, `build`, `security` and `image`
-on every PR and on `main`. Real-browser E2E (Playwright, Chromium) arrives in ATLAS-001 CP7.
+CI (`.github/workflows/frontend-ci.yml`) runs `static`, `unit`, `generated`, `build`, `security`, `image` and
+`e2e` on every PR and on `main`.
+
+## End-to-end tests (Playwright, Chromium)
+
+`pnpm e2e` runs the acceptance suite in real Chromium against the production build and the **real backend**:
+two API processes (diagnostics enabled and disabled) and the Taskiq worker, started from an `atlas-backend`
+checkout. Nothing in the browser is intercepted or mocked.
+
+| Suite                       | Covers                                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `e2e/status.spec.ts`        | healthy; database down → degraded → recovery; Redis down → recovery; API unreachable → recovery; diagnostics off                                 |
+| `e2e/contract.spec.ts`      | `specs.lock` parity with the backend's `specs_sha`; every API response checked against the pinned contract; CORS                                 |
+| `e2e/security.spec.ts`      | CSP (nonce, `strict-dynamic`, enforcement) and security headers on the served documents                                                          |
+| `e2e/accessibility.spec.ts` | axe-core on every page state (contrast from rendered pixels), keyboard and skip link, live region, 320 px, 200 %, forced colours, reduced motion |
+| `e2e/home.spec.ts`          | `/`: one heading, one working link                                                                                                               |
+
+Every test also fails on any browser console error, uncaught page error or CSP violation it did not cause on purpose.
+
+Outages are simulated by the suite's **own TCP proxies** (`e2e/support/fault-proxy.ts`) between the backend
+and PostgreSQL/Redis, and between the browser and the backend. No PostgreSQL, Redis or other service is ever
+stopped or reconfigured. Everything binds `127.0.0.1` (web :3000, API proxy :8110, backends :8111/:8112,
+dependency proxies :15432/:15433/:16379/:16380, stack control :8119).
+
+### Running it locally
+
+Prerequisites: the backend checkout next to this one (`../atlas-backend`, or set `ATLAS_E2E_BACKEND_DIR`), set up as
+in its README with `.env.test` (test roles, `atlas_test` migrated, Redis DB 11), and `uv` on `PATH`.
+
+```bash
+source scripts/dev-env.sh
+pnpm exec playwright install chromium   # once: Chromium into .tools/ms-playwright (version pinned by @playwright/test)
+pnpm specs                              # pinned contract for the response checks
+pnpm e2e:build                          # production build that calls the E2E API proxy (rebuilds .next)
+pnpm e2e                                # starts the backend stack, runs the suite, stops everything
+pnpm exec playwright show-report        # HTML report (playwright-report/)
+```
+
+The suite refuses to start unless the backend settings are the **test** environment (`ATLAS_ENV=test`,
+`atlas_test`, Redis DB 11; keys under `atlas:test:e2e:`). Connection URLs are read from `.env.test` (or `ATLAS_*`
+variables) into memory, passed only to the backend processes, and never printed or written to disk. Process logs go
+to `test-results/e2e-stack/` (git-ignored).
+
+In CI, the `e2e` job checks out `atlas-backend` at the commit in `e2e/backend.ref` and runs against job-local
+`postgres:15` and `redis:7.4` services with random, masked role passwords. It uploads the HTML report and stack logs
+(after checking they contain no credential).
 
 ## Project structure
 
@@ -84,6 +128,7 @@ src/styles/                   tokens.generated.css (never edit) + base.css
 src/proxy.ts                  per-request CSP nonce and security headers
 scripts/                      toolchain, specs, generation, header and image checks
 tests/                        test setup, axe helper, repository hygiene tests
+e2e/                          Playwright acceptance suite; support/ (stack, fault proxies, contract checks); backend.ref
 ```
 
 ## Docker image

@@ -5,4 +5,6 @@ export PATH="${_atlas_root}/.tools/node/bin:${PATH}"
 export COREPACK_HOME="${_atlas_root}/.tools/corepack"
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 export COREPACK_ENABLE_AUTO_PIN=0
+# Playwright browsers (pinned by the @playwright/test version) stay inside the project too.
+export PLAYWRIGHT_BROWSERS_PATH="${_atlas_root}/.tools/ms-playwright"
 unset _atlas_root

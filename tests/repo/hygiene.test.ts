@@ -63,6 +63,14 @@ describe("repository hygiene", () => {
     }
   });
 
+  it("E2E acceptance specs never intercept or mock requests (AC-16)", () => {
+    const specs = tracked.filter((f) => f.startsWith("e2e/") && f.endsWith(".ts"));
+    expect(specs.length).toBeGreaterThan(0);
+    for (const file of specs) {
+      expect(read(file), file).not.toMatch(/\.route\(|routeFromHAR|\.fulfill\(|setOffline\(/);
+    }
+  });
+
   it("source never injects raw HTML, evaluates strings or hard-codes colours", () => {
     const source = tracked.filter(
       (f) =>

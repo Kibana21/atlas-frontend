@@ -124,6 +124,7 @@ export function StatusView({ transport, frontendSha }: { transport?: Transport; 
   const lastChecked = updatedAt > 0 ? new Date(updatedAt).toLocaleTimeString("en-GB") : null;
 
   async function retry() {
+    if (fetching) return; // a check is already running
     await Promise.all(results.map((r) => r.refetch()));
   }
 
@@ -156,7 +157,8 @@ export function StatusView({ transport, frontendSha }: { transport?: Transport; 
           ) : null}
           {lastChecked ? <p className="text-xs text-ink-muted">Last checked {lastChecked}</p> : null}
         </div>
-        <Button onClick={() => void retry()} disabled={fetching} aria-describedby="retry-hint">
+        {/* aria-disabled, not disabled: a disabled button drops keyboard focus to the page while checks run. */}
+        <Button onClick={() => void retry()} aria-disabled={fetching} aria-describedby="retry-hint">
           <Icon name="refresh" className="size-icon-sm" />
           {fetching ? "Checking…" : "Check again"}
         </Button>
@@ -188,7 +190,8 @@ export function StatusView({ transport, frontendSha }: { transport?: Transport; 
         <Provenance model={model} frontendSha={frontendSha} />
       </Panel>
 
-      <p>
+      {/* Solid canvas backing: no dot of the canvas grid may sit behind link text (contrast, AR-01). */}
+      <p className="w-fit bg-surface-canvas">
         <TextLink href="/">Back to home</TextLink>
       </p>
     </div>

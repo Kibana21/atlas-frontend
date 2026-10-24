@@ -22,6 +22,8 @@ minimumReleaseAgeExclude:
   # Dev-only tooling (never shipped): zod (via eslint-plugin-react-hooks) and undici (via jsdom) advisories.
   - zod@4.6.6
   - undici@8.12.2
+  # Dev-only E2E tooling: fast-uri (via ajv) 3.1.9 fixes GHSA-w74x-v6f9-j3xg, -wjr9-j795-jxcr, -xhq7-xmqj-769h, -333x-w4r6-6crp.
+  - fast-uri@3.1.9
 # Dependency install scripts: none allowed. unrs-resolver's script only re-checks its prebuilt
 # binary, which arrives as an optional platform package, so it is explicitly denied.
 allowBuilds:
@@ -31,3 +33,4 @@ strictPeerDependencies: true
 overrides:
   zod: 4.6.6
   undici: 8.12.2
+  fast-uri: 3.1.9

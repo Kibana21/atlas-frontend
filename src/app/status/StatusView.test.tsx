@@ -128,4 +128,31 @@ describe("/status (FR-56)", () => {
     await waitFor(() => expect(t.calls).toBe(2));
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("System status");
   });
+
+  it("keeps keyboard focus on 'Check again' while checking, and ignores presses until done", async () => {
+    let release: () => void = () => undefined;
+    const base = transport();
+    const t = {
+      ...base,
+      calls: 0,
+      getHealthLive: () => {
+        t.calls += 1;
+        if (t.calls === 1) return ok({ status: "ok" as const });
+        return new Promise<void>((r) => (release = r)).then(() => ok({ status: "ok" as const }));
+      },
+    };
+    renderStatus(t as unknown as Transport);
+    await waitFor(() => expect(live()).toHaveTextContent("Status: Ready."));
+    const button = screen.getByRole("button", { name: /check again/i });
+    button.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "true"));
+    expect(button).toHaveFocus();
+    expect(button).not.toBeDisabled();
+    await userEvent.keyboard("{Enter}"); // ignored while the first check runs
+    expect(t.calls).toBe(2);
+    release();
+    await waitFor(() => expect(button).toHaveAttribute("aria-disabled", "false"));
+    expect(button).toHaveFocus();
+  });
 });
