@@ -1,0 +1,98 @@
+/* Atlas base styles (ATLAS-001 FR-54, AR-01..AR-10). Values come only from tokens.generated.css. */
+@layer base {
+  :root {
+    color-scheme: light; /* AR-10: light only until a dark theme is approved */
+  }
+
+  html {
+    font-family: var(--atlas-typography-font-family-sans);
+    color: var(--atlas-color-ink-primary);
+    background-color: var(--atlas-color-surface-canvas);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    font-size: var(--atlas-typography-size-sm);
+    line-height: var(--atlas-typography-line-height-ui);
+    font-weight: var(--atlas-typography-weight-regular);
+  }
+
+  h1,
+  h2,
+  h3 {
+    line-height: var(--atlas-typography-line-height-heading);
+    font-weight: var(--atlas-typography-weight-semibold);
+  }
+
+  code,
+  kbd,
+  samp {
+    font-family: var(--atlas-typography-font-family-mono);
+  }
+
+  /* AR-05: one visible focus style for every interactive element. */
+  :focus-visible {
+    outline: var(--atlas-focus-ring-width) solid var(--atlas-color-focus-ring);
+    outline-offset: var(--atlas-focus-ring-offset);
+  }
+
+  ::selection {
+    background-color: var(--atlas-color-entity-api-tint);
+    color: var(--atlas-color-ink-primary);
+  }
+}
+
+/* The bright "canvas" field behind every page: a faint dot grid on the canvas surface (decorative). */
+.atlas-canvas {
+  background-color: var(--atlas-color-surface-canvas);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--atlas-color-line-subtle) 75%, transparent) 1px,
+    transparent 1.5px
+  );
+  background-size: var(--atlas-space-6) var(--atlas-space-6);
+}
+
+/* Motion: tokens only, on opacity, colour and shadow (spec §7.3). */
+.atlas-transition {
+  transition-property: color, background-color, border-color, box-shadow, opacity;
+  transition-duration: var(--atlas-motion-duration-fast);
+  transition-timing-function: var(--atlas-motion-easing-standard);
+}
+
+@keyframes atlas-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.atlas-pulse {
+  animation: atlas-pulse 1.6s var(--atlas-motion-easing-standard) 3; /* finite: never longer than 5 s */
+}
+
+/* §7.3: reduced motion -> no durations, no transforms, no smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: var(--atlas-motion-reduced-duration) !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: var(--atlas-motion-reduced-duration) !important;
+    transform: var(--atlas-motion-reduced-transform) !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* AR-10: focus and status icons stay visible in forced-colours mode. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+
+  .atlas-icon {
+    forced-color-adjust: auto;
+    color: CanvasText;
+  }
+}
