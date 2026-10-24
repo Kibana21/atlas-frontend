@@ -1,0 +1,16 @@
+# Only what the build needs: never env files, toolchains, caches, build output or VCS data.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!.npmrc
+!next.config.ts
+!tsconfig.json
+!postcss.config.mjs
+!public/
+!src/
+**/*.test.ts
+**/*.test.tsx
+**/.DS_Store
+**/.env
+**/.env.*

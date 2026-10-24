@@ -1,0 +1,33 @@
+# pnpm settings (ATLAS-001 FR-50; supply chain as in the backend's exclude-newer policy).
+packages:
+  - .
+engineStrict: true
+# Resolve only releases at least 14 days old (minutes). Raise deliberately in a reviewed PR.
+minimumReleaseAge: 20160
+# Security exceptions to the age rule (each one reviewed and recorded in atlas-specs evidence):
+# next 16.4.1 fixes critical advisories GHSA-2464-fhr4-w9xw and GHSA-673q-mjm6-r5xr (<= 16.4.0).
+minimumReleaseAgeExclude:
+  - next@16.4.1
+  - "@next/env@16.4.1"
+  - "@next/eslint-plugin-next@16.4.1"
+  - "@next/swc-darwin-arm64@16.4.1"
+  - "@next/swc-darwin-x64@16.4.1"
+  - "@next/swc-linux-arm64-gnu@16.4.1"
+  - "@next/swc-linux-arm64-musl@16.4.1"
+  - "@next/swc-linux-x64-gnu@16.4.1"
+  - "@next/swc-linux-x64-musl@16.4.1"
+  - "@next/swc-win32-arm64-msvc@16.4.1"
+  - "@next/swc-win32-x64-msvc@16.4.1"
+  - eslint-config-next@16.4.1
+  # Dev-only tooling (never shipped): zod (via eslint-plugin-react-hooks) and undici (via jsdom) advisories.
+  - zod@4.6.6
+  - undici@8.12.2
+# Dependency install scripts: none allowed. unrs-resolver's script only re-checks its prebuilt
+# binary, which arrives as an optional platform package, so it is explicitly denied.
+allowBuilds:
+  unrs-resolver: false
+strictPeerDependencies: true
+# Patched transitive dev dependencies (same major), see minimumReleaseAgeExclude above.
+overrides:
+  zod: 4.6.6
+  undici: 8.12.2

@@ -12,14 +12,30 @@ This file is self-sufficient. A workspace-level file may exist locally, but it i
 
 ## Status
 
-Still a scaffold: `README.md`, `.gitignore` and this file. No `package.json`, code or CI yet. Frontend work for ATLAS-001 is a **later checkpoint** (CP6), which needs owner authorization and Node 24 LTS installed by the owner (P-04). Don't document commands until they exist. When tooling lands, add a **Commands** section with the approved scripts:
+ATLAS-001 CP6 (F-01…F-09, plus the F-11 CI brought forward) is in place:
 
-- `pnpm install --frozen-lockfile`;
-- `pnpm dev`;
-- `pnpm specs` (extract `contracts/` + `design/` at the pinned SHA);
-- `pnpm gen` (API types + tokens);
-- `pnpm check` (static + unit + generated-drift check);
-- `pnpm e2e`.
+- **Toolchain:** project-local Node 24.22.1 and pnpm 11.28.5.
+- **Generation:** contract types and tokens generated from the pinned `contract-v0.1.0`.
+- **App:** shell, `/` placeholder, `/status` (six states), the transport, CSP and headers, the image, and CI.
+
+CP7 (Playwright E2E against a real backend, F-12 `e2e` job, release tags) needs **owner authorization**.
+
+## Commands
+
+```bash
+scripts/bootstrap-node.sh && source scripts/dev-env.sh   # project-local Node + pnpm (nothing global)
+pnpm install --frozen-lockfile
+pnpm dev                    # :3000; needs .env.local (copy .env.example; API usually :8100/:8101)
+pnpm check                  # tsc strict, ESLint, Prettier, Vitest + axe, coverage >= 80 %
+pnpm specs && pnpm gen      # extract the pinned specs, regenerate API types + tokens
+pnpm check:generated        # drift check (CI `generated`)
+pnpm build && pnpm start    # production server; node scripts/check-headers.mjs http://127.0.0.1:3000
+scripts/image-check.sh      # image build, hadolint, Trivy, non-root, hardened run, headers, graceful stop
+```
+
+CI (`.github/workflows/frontend-ci.yml`) has the required checks `static`, `unit`, `generated`, `build`, `security` and `image`, on every PR and on `main`.
+
+Navigation stays minimal until product screens exist (FR-55; no dead controls): the shell has a skip link and the wordmark; `/` links only to `/status`.
 
 ## Workflow and approval boundaries
 
@@ -31,7 +47,6 @@ Still a scaffold: `README.md`, `.gitignore` and this file. No `package.json`, co
   5. Review the diff against the acceptance criteria.
   6. Merge with a merge commit and a head-SHA guard.
   7. Confirm `main` CI is green and record evidence in `atlas-specs`.
-- Until CI exists here, docs-only changes are verified manually, and the PR states that no checks ran.
 - Never force-push, push to `main`, bypass branch protection, or merge failing or missing checks.
 - Owner approval is required for:
   - material architecture or product changes;
