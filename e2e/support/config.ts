@@ -8,8 +8,8 @@ export const PORTS = {
   apiNoDiagnostics: 8112, // backend API, diagnostics disabled (AC-09, AC-15 d)
   database: 15432, // fault proxy in front of PostgreSQL (primary API and worker)
   redis: 16379, // fault proxy in front of Redis (primary API and worker)
-  databaseSteady: 15433, // pass-through proxies for the diagnostics-disabled API: never taken down, so
-  redisSteady: 16380, //    an outage drill on the primary leaves no stale connections in that process
+  databaseSteady: 15433, // pass-through proxies for the diagnostics-disabled API: never taken down, so each
+  redisSteady: 16380, //    outage drill affects only the primary API and worker (isolation between tests)
   control: 8119, // stack control API used by the tests
 } as const;
 

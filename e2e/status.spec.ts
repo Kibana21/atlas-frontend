@@ -172,6 +172,26 @@ test.describe("status page against the real backend", () => {
     await expect(status.provenance("Database migration")).toHaveText("0001_baseline");
   });
 
+  test("an API idle during a Redis outage reports Ready on its first check afterwards (A001-DEF-01)", async ({
+    page,
+    record,
+    stack,
+  }) => {
+    const status = new StatusPage(page);
+    await status.open();
+    await status.expectSummary("Ready"); // the API now holds a pooled Redis connection
+    await stack.down("redis"); // outage while the browser sends nothing
+    await stack.up("redis");
+    await status.checkAgainAndWait();
+    await status.expectSummary("Ready"); // first check after recovery: no false "Degraded"
+    await expect(status.check("Redis")).toContainText("Operational");
+    await record.settled();
+    const ready = record.responses.filter((r) => r.url.endsWith("/health/ready")).at(-1);
+    expect(ready?.status).toBe(200);
+    const events = await stack.logEvents("api-primary", ready?.requestCorrelationId ?? "");
+    expect(events.map((e) => e.event)).not.toContain("redis_command_failed");
+  });
+
   test("every backend process stays up through the simulated outages", async ({ page, stack }) => {
     const status = new StatusPage(page);
     await status.open();
