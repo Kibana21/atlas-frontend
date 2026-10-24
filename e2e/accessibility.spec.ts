@@ -256,12 +256,16 @@ test.describe("keyboard only", () => {
     // Space re-runs the checks; the keyboard user keeps their place on the button.
     const before = await page.getByText(/^Last checked /).textContent();
     await page.waitForTimeout(1100); // the timestamp has one-second resolution
+    let settled = status.nextReadinessSettled();
     await page.keyboard.press("Space");
+    await settled;
     await expect(page.getByText(/^Last checked /)).not.toHaveText(before ?? "");
-    await expect(status.checkAgain).toBeEnabled();
+    await status.expectIdle();
     await expect(status.checkAgain).toBeFocused();
+    settled = status.nextReadinessSettled();
     await page.keyboard.press("Enter");
-    await expect(status.checkAgain).toBeEnabled();
+    await settled; // Enter really triggered a refetch
+    await status.expectIdle();
     await expect(status.checkAgain).toBeFocused();
 
     await page.keyboard.press("Tab");

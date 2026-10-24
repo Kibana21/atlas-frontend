@@ -18,8 +18,10 @@ ATLAS-001 CP6 (F-01…F-09, plus the F-11 CI brought forward) is in place:
 - **Generation:** contract types and tokens generated from the pinned `contract-v0.1.0`.
 - **App:** shell, `/` placeholder, `/status` (six states), the transport, CSP and headers, the image, and CI.
 
-CP7 (owner-authorized): Playwright E2E in Chromium against the real backend (`pnpm e2e`, F-10), the CI `e2e` job
-(F-12, backend at `e2e/backend.ref`) and the README (F-13). The `v0.1.0` release tag follows only after G7 evidence.
+CP7: Playwright E2E in Chromium against the real backend (`pnpm e2e`, F-10), the CI `e2e` job (F-12, backend at
+`e2e/backend.ref`) and the README (F-13). **ATLAS-001 is Accepted** (owner, 24 Oct 2026; release `v0.1.0` = `b9f235e`).
+ATLAS-002 is approved in principle; its CP0 moved `e2e/backend.ref` to the backend fix for A001-DEF-01. No graph UI,
+canvas, projections or search in ATLAS-002.
 
 ## Commands
 
@@ -69,7 +71,7 @@ Navigation stays minimal until product screens exist (FR-55; no dead controls): 
   - Review the staged diff before every push.
 - **Credentials:** never print credentials, and never forward `Authorization` headers to redirected storage or third-party hosts.
 - **Local tooling:** use project-local, pinned tooling (Node version in `.nvmrc` + `engines`, `engine-strict`, committed `pnpm-lock.yaml`). Don't install tools globally or change the owner's Node installation without approval.
-- **Evidence:** never claim tests or CI passed without the actual run, and never weaken tests to get a pass. ATLAS-001 is not Accepted before G7.
+- **Evidence:** never claim tests or CI passed without the actual run, and never weaken tests to get a pass. Each work item is Accepted only at its final gate, by the owner.
 
 ## Stack (§5.1; ATLAS-001 DEC-038/DEC-092)
 

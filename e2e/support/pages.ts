@@ -1,7 +1,7 @@
 // Page helpers shared by the acceptance specs.
 import { readFileSync } from "node:fs";
 
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 
 import { expect } from "./fixtures";
 
@@ -30,10 +30,34 @@ export class StatusPage {
     await expect(this.page.getByRole("heading", { level: 1, name: "System status" })).toBeVisible();
   }
 
-  /** Presses "Check again" and waits until every check has finished. */
+  /**
+   * Resolves when the next readiness request finishes or fails (a real network event, not an interception).
+   * Arm it BEFORE the action that triggers the refetch.
+   */
+  nextReadinessSettled(): Promise<void> {
+    return new Promise((resolve) => {
+      const done = (request: Request) => {
+        if (!request.url().endsWith("/api/v1/health/ready")) return;
+        this.page.off("requestfinished", done);
+        this.page.off("requestfailed", done);
+        resolve();
+      };
+      this.page.on("requestfinished", done);
+      this.page.on("requestfailed", done);
+    });
+  }
+
+  /** Waits until no check is running ("Check again" is aria-disabled while busy, never disabled). */
+  async expectIdle(): Promise<void> {
+    await expect(this.checkAgain).toHaveAttribute("aria-disabled", "false");
+  }
+
+  /** Presses "Check again" and waits until this refetch has really completed. */
   async checkAgainAndWait(): Promise<void> {
+    const settled = this.nextReadinessSettled();
     await this.checkAgain.click();
-    await expect(this.checkAgain).toBeEnabled();
+    await settled;
+    await this.expectIdle();
   }
 
   async expectSummary(label: string): Promise<void> {
