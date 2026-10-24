@@ -15,7 +15,7 @@ export function Button({
   return (
     <button
       type={type}
-      className={`atlas-transition inline-flex h-control-lg min-w-control-sm items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${look} ${className}`}
+      className={`atlas-transition inline-flex h-control-lg min-w-control-sm items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60 ${look} ${className}`}
       {...rest}
     >
       {children}

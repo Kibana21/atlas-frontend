@@ -9,6 +9,8 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: { default: "Atlas", template: "%s · Atlas" },
   description: "Atlas: enterprise architecture intelligence.",
+  // No favicon is defined yet; an empty icon stops browsers requesting a missing /favicon.ico (404).
+  icons: { icon: "data:," },
 };
 
 // Every page is rendered per request so Next.js can apply the CSP nonce from src/proxy.ts (FR-57).
