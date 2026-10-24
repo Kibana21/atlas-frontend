@@ -117,6 +117,9 @@ async function measuredContrast(page: Page, selector: string) {
 }
 
 async function expectAccessible(page: Page, state: string): Promise<void> {
+  // Scan the settled page: a running transition (e.g. "Check again" fading back from its busy opacity)
+  // would make axe sample an intermediate colour.
+  await page.waitForFunction(() => document.getAnimations().length === 0);
   const results = await axe(page);
   await test.info().attach(`axe-${state}.json`, {
     body: JSON.stringify(results, null, 2),
