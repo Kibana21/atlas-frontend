@@ -129,7 +129,7 @@ export function StatusView({ transport, frontendSha }: { transport?: Transport; 
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex min-w-[480px] flex-col gap-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-ink-primary">System status</h1>
         <p className="mt-2 max-w-2xl text-md leading-body text-ink-secondary">
