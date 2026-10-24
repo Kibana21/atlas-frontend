@@ -1,0 +1,152 @@
+# atlas-frontend CI (ATLAS-001 F-11, brought forward to CP6 by owner authorization). Public repository, Mode A:
+# no secrets; permissions {} with read-only jobs; actions pinned by full commit SHA; no privileged PR trigger.
+# Every required job runs on pull_request and on push to main (never skipped). Node comes from .nvmrc and pnpm
+# from package.json "packageManager" (Corepack, hash-verified).
+name: frontend-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: frontend-ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable pnpm && pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable pnpm && pnpm install --frozen-lockfile
+      - run: pnpm test:coverage # unit, component and axe tests; coverage >= 80 % (src/lib, components, status)
+
+  generated:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read pinned atlas-specs commit
+        id: lock
+        run: echo "sha=$(awk -F'"' '/^specs_commit:/{print $2}' specs.lock)" >> "$GITHUB_OUTPUT"
+      - name: Checkout atlas-specs at the pinned commit (public, read-only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Kibana21/atlas-specs
+          ref: ${{ steps.lock.outputs.sha }}
+          path: .deps/atlas-specs
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable pnpm && pnpm install --frozen-lockfile
+      - run: SPECS_DIR=.deps/atlas-specs pnpm specs # lock valid, release tag present, extracted at the SHA
+      - run: pnpm check:generated # API types and tokens equal a fresh regeneration
+
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable pnpm && pnpm install --frozen-lockfile
+      - name: Invalid configuration fails the build with a clear message (FR-53)
+        run: |
+          if NEXT_PUBLIC_ATLAS_API_BASE_URL=notaurl pnpm build > invalid-build.log 2>&1; then
+            echo "build unexpectedly succeeded with an invalid API base URL"; exit 1
+          fi
+          grep -q "NEXT_PUBLIC_ATLAS_API_BASE_URL is not an absolute URL" invalid-build.log
+          echo "OK: invalid NEXT_PUBLIC_ATLAS_API_BASE_URL rejected"
+      - name: Production build
+        env:
+          NEXT_PUBLIC_ATLAS_API_BASE_URL: http://127.0.0.1:8100
+          NEXT_PUBLIC_ATLAS_FRONTEND_SHA: ${{ github.sha }}
+        run: pnpm build
+      - name: Production server sends the security headers (FR-57)
+        run: |
+          pnpm start > server.log 2>&1 &
+          for _ in $(seq 60); do curl -fsS -o /dev/null http://127.0.0.1:3000/ && break; sleep 1; done
+          node scripts/check-headers.mjs http://127.0.0.1:3000
+
+  security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable pnpm && pnpm install --frozen-lockfile
+      - run: pnpm audit --prod --audit-level high
+      - run: pnpm exec vitest run tests/repo # secrets, workflow rules, pins, no raw HTML/eval/hard-coded colours
+      - name: Dedicated secret scan of tracked files (Trivy, digest-pinned)
+        run: |
+          mkdir -p build/secret-scan
+          git ls-files -z | xargs -0 tar -cf - | tar -xf - -C build/secret-scan
+          docker run --rm -v "$PWD/build/secret-scan:/repo:ro" \
+            aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08 \
+            fs --quiet --scanners secret --exit-code 1 /repo
+
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Build, scan and verify the web image (F-09)
+        env:
+          NEXT_PUBLIC_ATLAS_FRONTEND_SHA: ${{ github.sha }}
+        run: scripts/image-check.sh
