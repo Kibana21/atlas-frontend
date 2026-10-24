@@ -2,27 +2,89 @@
 
 Next.js web app for Atlas: the bright shell, the architecture canvas, and the Studio / Explore / Intelligence experiences. It owns presentation, canvas interaction, and client state. The backend owns identity, authorization, graph rules, reconciliation, validation, and persistence. **Never duplicate authoritative graph business rules in TypeScript.** Form validation is for UX only, and the backend revalidates every write.
 
-Independent Git repo (`origin` = github.com/Kibana21/atlas-frontend). Workspace overview and product invariants: `../CLAUDE.md`. Specs: `../atlas-specs/ux/Atlas_Bright_UX_Interaction_Requirements_v1_1.md` (UX-* IDs, normative for behaviour) and `../atlas-specs/technical/...v1_1.md` §5, §17.2.
+Independent Git repo (`origin` = github.com/Kibana21/atlas-frontend, **public**). `atlas-specs` (sibling checkout `../atlas-specs`) is the authority:
+
+- `ux/Atlas_Bright_UX_Interaction_Requirements_v1_1.md` (UX-* IDs, normative for behaviour);
+- `technical/...v1_1.md` §5, §17.2;
+- `features/ATLAS-001-engineering-foundation/spec.md` (FR-50…FR-59).
+
+This file is self-sufficient. A workspace-level file may exist locally, but it is not versioned.
 
 ## Status
 
-Empty scaffold: only `README.md` and `.gitignore` (Node/Next). No `package.json`, code, or CI yet. Add a **Commands** section here once tooling exists. Don't document commands that aren't real. The package manager is undecided (pnpm is suggested in §17.2), so confirm with the user.
+Still a scaffold: `README.md`, `.gitignore` and this file. No `package.json`, code or CI yet. Frontend work for ATLAS-001 is a **later checkpoint** (CP6), which needs owner authorization and Node 24 LTS installed by the owner (P-04). Don't document commands until they exist. When tooling lands, add a **Commands** section with the approved scripts:
 
-## Stack (proposed, §5.1)
+- `pnpm install --frozen-lockfile`;
+- `pnpm dev`;
+- `pnpm specs` (extract `contracts/` + `design/` at the pinned SHA);
+- `pnpm gen` (API types + tokens);
+- `pnpm check` (static + unit + generated-drift check);
+- `pnpm e2e`.
 
-Next.js App Router · React · TypeScript **strict** · Tailwind · shadcn/ui (or the approved accessible kit) · TanStack Query for server state · Zustand for transient canvas state · XYFlow/React Flow for editable and curated graphs · ELK.js **in a Web Worker** for hierarchical/orthogonal layout · Vitest · Playwright · visual regression. A WebGL renderer (Sigma.js) is only an option for read-only high-density views, after a benchmark.
+## Workflow and approval boundaries
+
+- Claude runs the whole workflow.
+  1. Feature branch per approved task.
+  2. Run the local gates from a **fresh clone** of the committed branch.
+  3. Push, then open a PR to `main`.
+  4. Wait until every required check reports success.
+  5. Review the diff against the acceptance criteria.
+  6. Merge with a merge commit and a head-SHA guard.
+  7. Confirm `main` CI is green and record evidence in `atlas-specs`.
+- Until CI exists here, docs-only changes are verified manually, and the PR states that no checks ran.
+- Never force-push, push to `main`, bypass branch protection, or merge failing or missing checks.
+- Owner approval is required for:
+  - material architecture or product changes;
+  - destructive actions;
+  - shared-infrastructure changes;
+  - privileged access or credentials;
+  - significant cost or scope changes;
+  - unresolved spec conflicts;
+  - the next checkpoint or gate.
+- **Specs authority:**
+  - `specs.lock` pins the same full 40-hex `atlas-specs` SHA as the backend (ATLAS-001: the `contract-v0.1.0` commit).
+  - Implement only approved scope.
+  - If the contract or specs conflict, stop and report. Never patch around them here.
+- **Public repo:**
+  - Never commit secrets, tokens, credentials, confidential company or customer data, internal topology, or local-machine details (home paths, usernames).
+  - Review the staged diff before every push.
+- **Credentials:** never print credentials, and never forward `Authorization` headers to redirected storage or third-party hosts.
+- **Local tooling:** use project-local, pinned tooling (Node version in `.nvmrc` + `engines`, `engine-strict`, committed `pnpm-lock.yaml`). Don't install tools globally or change the owner's Node installation without approval.
+- **Evidence:** never claim tests or CI passed without the actual run, and never weaken tests to get a pass. ATLAS-001 is not Accepted before G7.
+
+## Stack (§5.1; ATLAS-001 DEC-038/DEC-092)
+
+Approved for ATLAS-001:
+
+- Next.js App Router, React;
+- TypeScript **strict** (+ `noUncheckedIndexedAccess`);
+- **Node 24 LTS**, **pnpm**;
+- Tailwind;
+- TanStack Query for server state;
+- ESLint, Vitest;
+- Playwright (**Chromium only**: WebKit and screenshot baselines are deferred, DEC-055);
+- openapi-typescript for API types; openapi-fetch as the runtime (provisional, DEC-092).
+
+Per tech §5.1, subject to the approved feature specs:
+
+- shadcn/ui (or the approved accessible kit);
+- Zustand for transient canvas state;
+- XYFlow/React Flow for editable and curated graphs;
+- ELK.js **in a Web Worker** for hierarchical/orthogonal layout.
+
+A WebGL renderer (Sigma.js) is only an option for read-only high-density views, after a benchmark.
 
 ## Target layout (§17.2)
 
-```
+```text
 package.json  next.config.ts  specs.lock
 public/azure-icons/          # pinned, versioned, licensed official Azure SVGs
 src/app/                     # routes, shell, layouts
 src/components/ui|canvas|shell/
 src/features/studio|explore|intelligence/
-src/generated/api/           # typed client generated from pinned atlas-specs OpenAPI. NEVER hand-edit
-src/lib/                     # auth, API transport, state, errors
-src/styles/                  # design tokens
+src/generated/api/           # schema.d.ts generated from the pinned atlas-specs OpenAPI. NEVER hand-edit
+src/lib/                     # auth, API transport (src/lib/api/transport.ts is the only module that knows the base URL), state, errors
+src/styles/                  # tokens.generated.css from atlas-specs design/tokens.json. NEVER hand-edit
 tests/  e2e/  deploy/  .github/workflows/
 ```
 
@@ -47,11 +109,19 @@ Routes (UX §3): `/`, `/landscape/:viewId`, `/applications/:id`, `/contracts[/:i
 - Context menus show only permitted actions. Forbidden ones are absent, or disabled with a reason. **No dead or "coming soon" controls.**
 - Every view needs loading, empty, stale, permission-denied, error, partial/truncated, and conflict states (UX §4.4). An empty gray canvas is never acceptable.
 - Restricted data is not revealed through labels, tooltips, counts, URLs, exports, or copy-link.
-- No PR or telemetry affordances anywhere: nav, copy, demo data, or exports (UX-GLB-012).
+- No excluded-scope affordances anywhere (nav, copy, demo data, exports):
+  - PR impact analysis or GitHub PR integration;
+  - live telemetry or monitoring;
+  - distributed tracing;
+  - live health dashboards;
+  - inferred runtime traffic.
+
+  This is UX-GLB-012.
 
 ## Visual system (UX §2, tech §5.3)
 
-Light theme by default (dark mode comes later, if ever). Proposed tokens: `--surface-app #FFFFFF`, `--surface-canvas #F8FAFE`, `--surface-subtle #F0F5FC`, `--ink-primary #15283F`, `--brand-primary #1769E0`. Entity colours: application `#5A54D6`, API `#1674E8`, compute `#8C58D8`, messaging `#C47B13`, data `#087F8C`, security `#BD4D76`, capability `#22865E`. All are candidates, so define them once in `src/styles` and validate them for WCAG 2.2 AA.
+Light theme by default (dark mode comes later, if ever). Proposed tokens: `--surface-app #FFFFFF`, `--surface-canvas #F8FAFE`, `--surface-subtle #F0F5FC`, `--ink-primary #15283F`, `--brand-primary #1769E0`. Entity colours: application `#5A54D6`, API `#1674E8`, compute `#8C58D8`, messaging `#C47B13`, data `#087F8C`, security `#BD4D76`, capability `#22865E`. All are **proposed** (DEC-065). Their source of truth is `atlas-specs` `design/tokens.json`, with contrast pairs checked there. Generate them into `src/styles` and never hard-code colours. Validate them for WCAG 2.2 AA.
+
 - **Colour never encodes status alone.** Trust/stale/inferred/proposed also get a chip, icon, or pattern.
 - Use official Azure SVG icons from the pinned registry. Unknown types get a labelled neutral fallback, never an emoji or misleading Azure branding.
 - Containers are pale tints with 1–2px borders. Edges are neutral slate and orthogonal, with clear ports, and don't route through node bodies. Selection is a 2px+ blue highlight.
@@ -60,7 +130,7 @@ Light theme by default (dark mode comes later, if ever). Proposed tokens: `--sur
 
 ## Testing expectations (§17.5, UX §11, §13)
 
-TypeScript strict, ESLint, Vitest unit/component tests, generated-client reproducibility check, **Playwright E2E in real Chromium + one other browser against a persisted backend (no mocked clicks in acceptance tests)**, golden screenshots at 1440×900 and 1280×720, and automated plus manual accessibility checks. Validate a 100-node and a dense 1,000-node projection. Smoke journey: landscape → select app → X-Ray → Passport → save draft layout → reload.
+TypeScript strict, ESLint, Vitest unit/component tests, generated-client reproducibility check, **Playwright E2E in real Chromium against a persisted backend (no mocked clicks or route interception in acceptance tests)**, axe accessibility checks plus manual checks. A second browser engine and golden screenshots at 1440×900 / 1280×720 are deferred (DEC-055). Validate a 100-node and a dense 1,000-node projection. Smoke journey: landscape → select app → X-Ray → Passport → save draft layout → reload.
 
 Proposed performance targets: search p95 ≤1.5s, Passport ≤2.5s, curated landscape ≤3s (≤300 nodes / ≤500 bundles), X-Ray expand ≤2s. Rendering budgets are UX safety limits, not data limits.
 
